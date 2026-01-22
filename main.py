@@ -4,7 +4,9 @@ from fastapi import FastAPI
 from sqlalchemy import Column, Integer, String, create_engine, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy import text
 from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
 
 
 # Database configuration
@@ -35,11 +37,18 @@ app = FastAPI()
 async def login(email, password):
     db=SessionLocal()
     ph = PasswordHasher()
-    heldPassword = db.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+    result = db.execute(
+        text("SELECT * FROM users WHERE email = :email"),
+        {"email": email}
+    ).fetchone()
+    if(result is None):
+        print("Kullanıcı yok")
     #return ph.verify(heldPassword,password)
-    if ph.verify(heldPassword,password):
+    heldPassword = result[2]
+    try:
+        ph.verify(heldPassword,password)
         print("aaaa")
-    else:
+    except VerifyMismatchError:
         print("bbb")
 if __name__ == "__main__":
     uvicorn.run(app)
