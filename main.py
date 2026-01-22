@@ -2,15 +2,20 @@ from datetime import datetime, timedelta
 from os import getenv
 
 import uvicorn
+
 from fastapi import FastAPI, HTTPException
+
 from sqlalchemy import Column, Integer, String, create_engine, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import text
+
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
+
 from dotenv import load_dotenv
-import os
+from jose import jwt
+
 load_dotenv()
 
 
@@ -46,15 +51,15 @@ app = FastAPI()
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 7
-privatekey=getenv("SECRET_KEY")
-@app.post("/AUTH/LOGIN")
+private_key=getenv("SECRET_KEY")
 
 def create_access_token(data: dict):
     to_encode=data.copy()
-    expire = datetime.now + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    expire = datetime.now() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, private_key, algorithm=ALGORITHM)
 
-
+@app.post("/AUTH/LOGIN")
 async def login(email, password):
     db=SessionLocal()
     ph = PasswordHasher()
@@ -63,6 +68,7 @@ async def login(email, password):
         {"email": email}
     ).fetchone()
     if(result is None):
+        db.close()
         raise HTTPException(status_code=404, detail="User not found")
     #return ph.verify(heldPassword,password)
     heldPassword = result[2]
@@ -71,6 +77,8 @@ async def login(email, password):
         print("aaaa")
     except VerifyMismatchError:
         print("bbb")
+    db.close()
+
 if __name__ == "__main__":
     uvicorn.run(app)
 
