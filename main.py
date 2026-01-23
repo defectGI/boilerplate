@@ -75,7 +75,6 @@ async def login(email,password):
         {"email": email}
     ).fetchone()
     if result is None :
-        db.close()
         raise HTTPException(status_code=404, detail="User not found")
     #return ph.verify(heldPassword,password)
     heldPassword = result[2]
@@ -83,20 +82,24 @@ async def login(email,password):
         ph.verify(heldPassword,password)
         refresh,refresh_expire=create_refresh_token({"email":email , "password": password})
         access,access_expire=create_access_token({"email":email , "password": password})
-
-        print(refresh + "\n"+access)
         return refresh, access, refresh_expire
     except VerifyMismatchError:
-        print("bbb")
         raise HTTPException(status_code=404, detail="Email password combination invalid")
     finally:
         db.close()
 
-    @app.post("/AUTH/REFRESH")
-    async def refresh(refresh_token):
-        db=SessionLocal()
-        create_access_token({"email":email , "password": password})
+@app.post("/AUTH/REFRESH")
+async def refresh(refresh_token):
+    new_access=create_access_token({"refresh":refresh_token})
+    return  new_access
 
+@app.post("/AUTH/LOGOUT")
+async def logout(email):
+    db=SessionLocal()
+    db.execute(text("UPDATE users SET refresh_token = :refresh WHERE email = :email"),{"refresh":None,"email":email})
+    db.commit()
+    db.close()
+    return {"status":"success"}
 if __name__ == "__main__":
     uvicorn.run(app)
 
