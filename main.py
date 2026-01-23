@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta
-from email.policy import default
 from os import getenv
 
+import sqlalchemy
 import uvicorn
 
 from fastapi import FastAPI, HTTPException
@@ -73,15 +73,17 @@ async def login(email,password):
     result = db.execute(
         text("SELECT * FROM users WHERE email = :email"),
         {"email": email}
-    ).fetchone()
+    ).mappings().fetchone()
     if result is None :
         raise HTTPException(status_code=404, detail="User not found")
     #return ph.verify(heldPassword,password)
-    heldPassword = result[2]
+    heldPassword = result["password_hash"]
     try:
         ph.verify(heldPassword,password)
         refresh,refresh_expire=create_refresh_token({"email":email , "password": password})
-        access,access_expire=create_access_token({"email":email , "password": password})
+        access,access_expire=create_access_token({"id":result["id"],"email":email , "password": password})
+        #acces printed for test purposes on auth/me
+        print(access)
         return refresh, access, refresh_expire
     except VerifyMismatchError:
         raise HTTPException(status_code=404, detail="Email password combination invalid")
@@ -95,12 +97,26 @@ async def refresh(refresh_token):
 
 @app.post("/AUTH/LOGOUT")
 async def logout(email):
-    db=SessionLocal()
-    db.execute(text("UPDATE users SET refresh_token = :refresh WHERE email = :email"),{"refresh":None,"email":email})
-    db.commit()
-    db.close()
-    return {"status":"success"}
+    try:
+        db=SessionLocal()
+        db.execute(text("UPDATE users SET refresh_token = :refresh WHERE email = :email"),{"refresh":None,"email":email})
+        db.commit()
+        return {"status": "success"}
+    except sqlalchemy.exc.SQLAlchemyError:
+        raise HTTPException(status_code=404, detail="SQL ERROR!")
+
 if __name__ == "__main__":
     uvicorn.run(app)
+
+@app.get("/AUTH/ME")
+async def me(access_token):
+    try:
+        db=SessionLocal()
+        derived_id= jwt.decode(access_token, private_key, algorithms=[ALGORITHM])["id"]
+        result = db.execute(text("SELECT * FROM users WHERE id = :id "),{"id":derived_id}).mappings().fetchone()
+        print(result["id"], result["email"], result["role"])
+        return result["id"], result["email"], result["role"]
+    except sqlalchemy.exc.SQLAlchemyError:
+        raise HTTPException(status_code=404, detail="SQL ERROR!")
 
 
