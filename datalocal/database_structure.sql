@@ -1,4 +1,3 @@
-DROP TABLE IF EXISTS users;
 CREATE TABLE users (
     id TEXT PRIMARY KEY,
     email TEXT UNIQUE NOT NULL,
@@ -8,8 +7,7 @@ CREATE TABLE users (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     last_login_at DATETIME,
-    failed_login_count INTEGER DEFAULT 0 CHECK(failed_login_count >= 0),
+    failed_login_count INTEGER DEFAULT 0,
     locked_until DATETIME,
-    refresh_token TEXT,
-    refresh_token_expires_at DATETIME
+    refresh_token TEXT
 );
