@@ -1,9 +1,11 @@
+import ipaddress
 from datetime import datetime, timedelta
 from os import getenv
 
 import sqlalchemy
 import uvicorn
 from fastapi import FastAPI, HTTPException
+from fastapi import Request
 from sqlalchemy import Column, Integer, String, DateTime, create_engine, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -13,6 +15,7 @@ from argon2.exceptions import VerifyMismatchError
 
 from dotenv import load_dotenv
 from jose import jwt
+
 
 import constants
 
@@ -57,6 +60,17 @@ Base.metadata.create_all(bind=engine)
 # App
 app = FastAPI()
 
+@app.middleware("http")
+async def secure_headers(request: Request, call_next):
+    response = await call_next(request)
+
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "no-referrer"
+
+    return response
+
+
 # Token helpers
 def create_access_token(data: dict):
     to_encode = data.copy()
@@ -80,13 +94,22 @@ def create_refresh_token(data: dict):
 
     return refresh, expire
 
-def failed_login():
-    #to be implemented
+def failed_login(db, email, request: Request):
+    ip = request.client.host
+    db.execute(text(constants.SQL_UPDATE_LOGIN_ATTEMPT),
+               {"email": email, "ip_address": ip})
+    db.commit()
     return 0
 # Routes
 @app.post(constants.PATH_AUTH_LOGIN)
-async def login(email, password):
+async def login(email, password, request: Request):
     db = SessionLocal()
+
+    ip=request.client.host
+    number_of_attempts = db.execute(text(constants.SQL_COUNT_LOGINS_LAST_FIVE_MINUTES),{"ip_address": ip}).fetchone()
+    attempts = number_of_attempts[0] if number_of_attempts else 0
+    if attempts > 5:
+        exit()
     ph = PasswordHasher()
 
     try:
@@ -112,18 +135,16 @@ async def login(email, password):
         print(access)
         db.execute(text(constants.SQL_UPDATE_SET_USER_ACTIVE), {"email": email})
 
-        db.execute(text(constants.SQL_UPDATE_LAST_LOGIN),{"date":datetime.now(),"email": email})
+        db.execute(text(constants.SQL_UPDATE_LAST_LOGIN), {"date":datetime.now(), "email": email})
 
         db.commit()
-        return refresh, access, refresh_expire
-
-    except VerifyMismatchError:
-
-        db.commit()
-        raise HTTPException(status_code=404, detail="Email password combination invalid")
-    finally:
         db.close()
-
+        print("aaa")
+        return refresh, access, refresh_expire
+    except VerifyMismatchError:
+        failed_login(db, email,request)
+        db.close()
+        raise HTTPException(status_code=404, detail="Email password combination invalid")
 
 @app.post(constants.PATH_AUTH_REFRESH)
 async def refresh(refresh_token):
@@ -136,7 +157,7 @@ async def logout(email):
     db = SessionLocal()
     try:
         db.execute(text(SQL_UPDATE_REFRESH_NULL_BY_EMAIL), {"refresh": None, "email": email})
-        db.execute(text(constants.SQL_UPDATE_SET_USER_INACTIVE),{"email": email})
+        db.execute(text(constants.SQL_UPDATE_SET_USER_INACTIVE), {"email": email})
         db.commit()
         return {"status": "success"}
     except sqlalchemy.exc.SQLAlchemyError:
@@ -163,7 +184,19 @@ async def me(access_token):
         raise HTTPException(status_code=404, detail="SQL ERROR!")
     finally:
         db.close()
+@app.get(constants.PATH_HEALTH)
+async def health():
+    try:
+        db = SessionLocal()
+        db.execute(text(constants.SQL_SELECT_HEALTH))
+        db_status="healthy"
+    except:
+        db_status="unhealthy"
 
+    if(db_status == "healthy"):
+        return {"status": "success, database is healthy"}
+    else:
+        return {"status": "unhealthy database is unhealthy"}
 
 if __name__ == "__main__":
     uvicorn.run(app)
