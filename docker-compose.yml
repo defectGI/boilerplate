@@ -7,7 +7,8 @@ services:
       - "8000:8000"
     volumes:
       - ./app:/app
-      - ./datalocal:/app/datalocal
+      - ./db/migrations:/app/db/migrations
+
     env_file:
       - .env
     environment:

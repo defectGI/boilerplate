@@ -1,4 +1,4 @@
-import ipaddress
+import email
 from datetime import datetime, timedelta
 from os import getenv
 
@@ -6,7 +6,9 @@ import sqlalchemy
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi import Request
+from pydantic import EmailStr, BaseModel
 from sqlalchemy import Column, Integer, String, DateTime, create_engine, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
@@ -53,6 +55,10 @@ class Users(Base):
     updated_at = Column(DateTime, default=datetime.now)
     refresh_token = Column(String)
     last_login_at = Column(DateTime)
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
 
 
 Base.metadata.create_all(bind=engine)
@@ -102,15 +108,19 @@ def failed_login(db, email, request: Request):
     return 0
 # Routes
 @app.post(constants.PATH_AUTH_LOGIN)
-async def login(email, password, request: Request):
+async def login(body:LoginRequest, request: Request):
+    email = body.email
+    password = body.password
+
+    ph = PasswordHasher()
     db = SessionLocal()
 
     ip=request.client.host
+
     number_of_attempts = db.execute(text(constants.SQL_COUNT_LOGINS_LAST_FIVE_MINUTES),{"ip_address": ip}).fetchone()
     attempts = number_of_attempts[0] if number_of_attempts else 0
     if attempts > 5:
-        exit()
-    ph = PasswordHasher()
+        raise HTTPException(status_code=403, detail="This ip is locked")
 
     try:
         # fetch user by email
@@ -180,7 +190,7 @@ async def me(access_token):
         print(result["id"], result["email"], result["role"])
         return result["id"], result["email"], result["role"]
 
-    except sqlalchemy.exc.SQLAlchemyError:
+    except SQLAlchemyError:
         raise HTTPException(status_code=404, detail="SQL ERROR!")
     finally:
         db.close()
