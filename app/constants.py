@@ -6,7 +6,8 @@ PATH_AUTH_ME = "/auth/me"
 PATH_HEALTH = "/health"
 
 #DB / Env
-DATABASE_URL = "sqlite:///./datalocal/database.db"
+import os
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./database.db")
 ENV_SECRET_KEY = "SECRET_KEY"
 
 #SQL queries

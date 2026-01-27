@@ -5,13 +5,9 @@ services:
     build: .
     ports:
       - "8000:8000"
-    volumes:
-      - ./app:/app
-      - ./data:/data
-      - ./db/migrations:/app/db/migrations
-
     env_file:
       - .env
     environment:
       - ENVIRONMENT=development
+      - DATABASE_URL=sqlite:////app/data/database.db
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload

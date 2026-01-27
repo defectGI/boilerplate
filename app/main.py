@@ -1,4 +1,3 @@
-import email
 from datetime import datetime, timedelta
 from os import getenv
 
@@ -6,11 +5,9 @@ import sqlalchemy
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi import Request
-from pydantic import EmailStr, BaseModel
-from sqlalchemy import Column, Integer, String, DateTime, create_engine, text
+from fastapi.params import Depends
+from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
 
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
@@ -18,50 +15,16 @@ from argon2.exceptions import VerifyMismatchError
 from dotenv import load_dotenv
 from jose import jwt
 
-
 import constants
+from app.tables import SessionLocal, LoginRequest, get_db
 
 load_dotenv()
 
-#Config
 DATABASE_URL = constants.DATABASE_URL
 ALGORITHM = constants.ALGORITHM
 ACCESS_TOKEN_EXPIRE_MINUTES = constants.ACCESS_TOKEN_EXPIRE_MINUTES
 REFRESH_TOKEN_EXPIRE_DAYS = constants.REFRESH_TOKEN_EXPIRE_DAYS
 SECRET_KEY = getenv(constants.ENV_SECRET_KEY)
-
-
-# SQL strings (readable)
-SQL_SELECT_USER_BY_EMAIL = constants.SQL_SELECT_USER_BY_EMAIL
-SQL_SELECT_USER_BY_ID = constants.SQL_SELECT_USER_BY_ID
-SQL_UPDATE_REFRESH_BY_EMAIL = constants.SQL_UPDATE_REFRESH_BY_EMAIL
-SQL_UPDATE_REFRESH_NULL_BY_EMAIL = constants.SQL_UPDATE_REFRESH_NULL_BY_EMAIL
-
-# DB setup
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
-
-
-class Users(Base):
-    __tablename__ = "users"
-
-    id = Column(Integer, primary_key=True)
-    email = Column(String, nullable=False)
-    password_hash = Column(String, nullable=False)
-    role = Column(String)
-    is_active = Column(Integer)
-    created_at = Column(DateTime, default=datetime.now)
-    updated_at = Column(DateTime, default=datetime.now)
-    refresh_token = Column(String)
-    last_login_at = Column(DateTime)
-
-class LoginRequest(BaseModel):
-    email: EmailStr
-    password: str
-
-
-Base.metadata.create_all(bind=engine)
 
 # App
 app = FastAPI()
@@ -69,11 +32,9 @@ app = FastAPI()
 @app.middleware("http")
 async def secure_headers(request: Request, call_next):
     response = await call_next(request)
-
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "no-referrer"
-
     return response
 
 
@@ -108,12 +69,12 @@ def failed_login(db, email, request: Request):
     return 0
 # Routes
 @app.post(constants.PATH_AUTH_LOGIN)
-async def login(body:LoginRequest, request: Request):
+async def login(body:LoginRequest, request: Request,db = Depends(get_db)):
     email = body.email
     password = body.password
 
     ph = PasswordHasher()
-    db = SessionLocal()
+
 
     ip=request.client.host
 
@@ -150,7 +111,7 @@ async def login(body:LoginRequest, request: Request):
         db.commit()
         db.close()
         print("aaa")
-        return refresh, access, refresh_expire
+        return {"refresh_token":refresh, "access_token":access, "refresh_expire_at":refresh_expire}
     except VerifyMismatchError:
         failed_login(db, email,request)
         db.close()
@@ -163,10 +124,10 @@ async def refresh(refresh_token):
 
 
 @app.post(constants.PATH_AUTH_LOGOUT)
-async def logout(email):
-    db = SessionLocal()
+async def logout(email,db = Depends(get_db)):
+
     try:
-        db.execute(text(SQL_UPDATE_REFRESH_NULL_BY_EMAIL), {"refresh": None, "email": email})
+        db.execute(text(constants.SQL_UPDATE_REFRESH_NULL_BY_EMAIL), {"refresh": None, "email": email})
         db.execute(text(constants.SQL_UPDATE_SET_USER_INACTIVE), {"email": email})
         db.commit()
         return {"status": "success"}
@@ -176,13 +137,13 @@ async def logout(email):
         db.close()
 
 @app.get(constants.PATH_AUTH_ME)
-async def me(access_token):
-    db = SessionLocal()
+async def me(access_token,db = Depends(get_db)):
+
     try:
         derived_id = jwt.decode(access_token, SECRET_KEY, algorithms=[ALGORITHM])["id"]
 
         result = (
-            db.execute(text(SQL_SELECT_USER_BY_ID), {"id": derived_id})
+            db.execute(text(constants.SQL_SELECT_USER_BY_ID), {"id": derived_id})
             .mappings()
             .fetchone()
         )
