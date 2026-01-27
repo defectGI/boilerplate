@@ -120,7 +120,7 @@ async def login(body:LoginRequest, request: Request,db = Depends(get_db)):
 @app.post(constants.PATH_AUTH_REFRESH)
 async def refresh(refresh_token):
     new_access = create_access_token({"refresh": refresh_token})
-    return new_access
+    return {"access_token" : new_access}
 
 
 @app.post(constants.PATH_AUTH_LOGOUT)

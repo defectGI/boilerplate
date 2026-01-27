@@ -11,6 +11,10 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./database.db")
 ENV_SECRET_KEY = "SECRET_KEY"
 
 #SQL queries
+INSERT_USER_QUERY = """
+        INSERT INTO users (email, password_hash, role, is_active)
+        VALUES (:email, :password_hash, :role, :is_active)
+    """
 SQL_SELECT_USER_BY_EMAIL = "SELECT * FROM users WHERE email = :email"
 SQL_SELECT_USER_BY_ID = "SELECT * FROM users WHERE id = :id"
 SQL_UPDATE_REFRESH_BY_EMAIL = "UPDATE users SET refresh_token = :refresh WHERE email = :email"
