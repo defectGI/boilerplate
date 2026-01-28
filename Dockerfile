@@ -6,7 +6,7 @@ RUN pip install -r requirements.txt
 
 RUN apt-get update && apt-get install -y sqlite3 && rm -rf /var/lib/apt/lists/*
 
-COPY ./app .
+COPY ./app ./app
 COPY ./migrations /app/migrations
 RUN mkdir -p /app/data
 
@@ -15,4 +15,4 @@ RUN chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

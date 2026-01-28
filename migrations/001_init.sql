@@ -5,7 +5,7 @@
         role VARCHAR,
         is_active INTEGER,
         created_at DATETIME,
-        updated_at DATETIME, refresh_token TEXT, last_login_at DATETIME, failed_login_count INTEGER DEFAULT 0, locked_until DATETIME,
+        updated_at DATETIME, refresh_token TEXT,  refresh_token_expire DATETIME DEFAULT CURRENT_TIMESTAMP, last_login_at DATETIME, failed_login_count INTEGER DEFAULT 0, locked_until DATETIME,
         PRIMARY KEY (id)
     );
     CREATE TABLE login_attempts (

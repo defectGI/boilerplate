@@ -23,6 +23,7 @@ SQL_UPDATE_SET_USER_ACTIVE ="UPDATE users SET is_active = 1 WHERE email = :email
 SQL_UPDATE_SET_USER_INACTIVE ="UPDATE users SET is_active = 0 WHERE email = :email"
 SQL_UPDATE_LAST_LOGIN="UPDATE users SET last_login_at = :date WHERE email = :email"
 SQL_SELECT_HEALTH="SELECT 1"
+REFRESH_TOKEN_CREATION_QUERY="UPDATE users SET refresh_token = :refresh, refresh_token_expire = :expire WHERE email = :email"
 SQL_UPDATE_LOGIN_ATTEMPT="""INSERT INTO login_attempts (ip_address, email, attempt_count, first_attempt, last_attempt)
 VALUES (:ip_address, :email, 1, datetime('now'), datetime('now'))
 ON CONFLICT(ip_address) DO UPDATE SET
@@ -43,11 +44,15 @@ SQL_COUNT_LOGINS_LAST_FIVE_MINUTES="""SELECT attempt_count
 FROM login_attempts
 WHERE ip_address = :ip_address;
 """
-
+SQL_VALIDATE_REFRESH="SELECT 1 FROM users  WHERE id = :id AND refresh_token = :token AND refresh_token_expire > datetime('NOW')"
+INSERT_TEST_USER = """
+    INSERT INTO users (email, password_hash, role, is_active, created_at, updated_at, refresh_token, refresh_token_expire, last_login_at, failed_login_count, locked_until)
+    VALUES (:email, :password_hash, :role, 1, datetime('now'), datetime('now'), '', NULL, NULL, 0, NULL)
+"""
 
 
 #Token Creation
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 REFRESH_TOKEN_EXPIRE_DAYS = 7
-refresh_token_creation_query="UPDATE users SET refresh_token= :refresh WHERE email = :email"
+

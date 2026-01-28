@@ -1,4 +1,4 @@
-INSERT INTO users (id, email, password_hash, role, is_active, created_at, updated_at, refresh_token, last_login_at, failed_login_count, locked_until)
+INSERT INTO users (id, email, password_hash, role, is_active, created_at, updated_at, refresh_token,refresh_token_expire ,last_login_at, failed_login_count, locked_until)
 VALUES (
     1,
     'admin@gmail.com',
@@ -8,12 +8,14 @@ VALUES (
     datetime('now', '-2 days'),
     datetime('now'),
     ' ',
+    datetime('now', '-3 days')
+    ,
     datetime('now', '-1 hour'),
     0,
     NULL
 );
 
-INSERT INTO users (id, email, password_hash, role, is_active, created_at, updated_at, refresh_token, last_login_at, failed_login_count, locked_until)
+INSERT INTO users (id, email, password_hash, role, is_active, created_at, updated_at, refresh_token, refresh_token_expire,last_login_at, failed_login_count, locked_until)
 VALUES (
     2,
     'kaan@gmail.com',
@@ -23,6 +25,8 @@ VALUES (
     datetime('now', '-3 days'),
     datetime('now', '-2 days'),
     ' ',
+    datetime('now', '-5 days')
+    ,
     datetime('now', '-3 hours'),
     0,
     NULL

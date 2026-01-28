@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from os import getenv
 
 import sqlalchemy
@@ -13,10 +13,9 @@ from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 
 from dotenv import load_dotenv
-from jose import jwt
-
 import constants
-from app.tables import SessionLocal, LoginRequest, get_db
+from tables import SessionLocal, LoginRequest, get_db
+from jose import jwt, JWTError
 
 load_dotenv()
 
@@ -26,7 +25,6 @@ ACCESS_TOKEN_EXPIRE_MINUTES = constants.ACCESS_TOKEN_EXPIRE_MINUTES
 REFRESH_TOKEN_EXPIRE_DAYS = constants.REFRESH_TOKEN_EXPIRE_DAYS
 SECRET_KEY = getenv(constants.ENV_SECRET_KEY)
 
-# App
 app = FastAPI()
 
 @app.middleware("http")
@@ -38,51 +36,43 @@ async def secure_headers(request: Request, call_next):
     return response
 
 
-# Token helpers
-def create_access_token(data: dict):
-    to_encode = data.copy()
-    expire = datetime.now() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM), expire
+def create_access_token(id: int, db):
+    user = db.execute(text(constants.SQL_SELECT_USER_BY_ID), {"id": id}).mappings().fetchone()
+    if not user:
+        raise HTTPException(status_code=404, detail="Kullanıcı acces_token üretimi için bulunamadı")
+    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode = {
+        "id": user["id"],
+        "email": user["email"],
+        "role": user["role"],
+        "exp": expire
+    }
+    access_token = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return access_token, expire
 
 
-def create_refresh_token(data: dict):
-    db = SessionLocal()
-    to_encode = data.copy()
-    expire = datetime.now() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
-    to_encode.update({"exp": expire})
-
-    refresh = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-
-    # store refresh in DB (same behavior)
-    db.execute(text(constants.refresh_token_creation_query), {"refresh": refresh, "email": data["email"]})
-    db.commit()
-    db.close()
-
+def create_refresh_token(email, db):
+    expire = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    refresh = jwt.encode({"email":email, "exp": expire}, SECRET_KEY, algorithm=ALGORITHM)
+    db.execute(text(constants.REFRESH_TOKEN_CREATION_QUERY), {"refresh": refresh, "expire": expire, "email": email})
     return refresh, expire
 
 def failed_login(db, email, request: Request):
     ip = request.client.host
     db.execute(text(constants.SQL_UPDATE_LOGIN_ATTEMPT),
                {"email": email, "ip_address": ip})
-    db.commit()
     return 0
 # Routes
 @app.post(constants.PATH_AUTH_LOGIN)
 async def login(body:LoginRequest, request: Request,db = Depends(get_db)):
     email = body.email
     password = body.password
-
     ph = PasswordHasher()
-
-
     ip=request.client.host
-
     number_of_attempts = db.execute(text(constants.SQL_COUNT_LOGINS_LAST_FIVE_MINUTES),{"ip_address": ip}).fetchone()
     attempts = number_of_attempts[0] if number_of_attempts else 0
     if attempts > 5:
         raise HTTPException(status_code=403, detail="This ip is locked")
-
     try:
         # fetch user by email
         result = (
@@ -90,71 +80,69 @@ async def login(body:LoginRequest, request: Request,db = Depends(get_db)):
             .mappings()
             .fetchone()
         )
-
         if result is None:
             raise HTTPException(status_code=404, detail="User not found")
 
         held_password_hash = result["password_hash"]
-
         # verify password
         ph.verify(held_password_hash, password)
 
-        refresh, refresh_expire = create_refresh_token({"email": email, "password": password})
-        access, access_expire = create_access_token({"id": result["id"], "email": email, "password": password})
+        refresh_token, refresh_expire = create_refresh_token(result["email"], db)
+        access, access_expire = create_access_token(result["id"], db)
 
-        # printed for test purposes on auth/me
-        print(access)
         db.execute(text(constants.SQL_UPDATE_SET_USER_ACTIVE), {"email": email})
 
-        db.execute(text(constants.SQL_UPDATE_LAST_LOGIN), {"date":datetime.now(), "email": email})
+        db.execute(text(constants.SQL_UPDATE_LAST_LOGIN), {"date":datetime.now(timezone.utc), "email": email})
 
-        db.commit()
-        db.close()
         print("aaa")
-        return {"refresh_token":refresh, "access_token":access, "refresh_expire_at":refresh_expire}
+        return {"refresh_token":refresh_token, "access_token":access, "refresh_expire_at":refresh_expire}
     except VerifyMismatchError:
         failed_login(db, email,request)
-        db.close()
         raise HTTPException(status_code=404, detail="Email password combination invalid")
 
 @app.post(constants.PATH_AUTH_REFRESH)
-async def refresh(refresh_token):
-    new_access = create_access_token({"refresh": refresh_token})
-    return {"access_token" : new_access}
+async def refresh(refresh_token, db = Depends(get_db)):
+    try:
+        payload = jwt.decode(refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
+        email = payload["email"]
+        user = db.execute(text(constants.SQL_SELECT_USER_BY_EMAIL), {"email": email}).mappings().fetchone()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        validate = db.execute(text(constants.SQL_VALIDATE_REFRESH), {"id": user["id"], "token": refresh_token}).fetchone()
+    except JWTError:
+        raise HTTPException(status_code=404, detail="Refresh token error")
+    if not validate:
+        raise HTTPException(status_code=403, detail="Refresh token expired")
+    access, access_expire = create_access_token(user["id"],db)
+    return {"access_token" : access, "access_expire" : access_expire}
 
 
 @app.post(constants.PATH_AUTH_LOGOUT)
 async def logout(email,db = Depends(get_db)):
-
     try:
         db.execute(text(constants.SQL_UPDATE_REFRESH_NULL_BY_EMAIL), {"refresh": None, "email": email})
         db.execute(text(constants.SQL_UPDATE_SET_USER_INACTIVE), {"email": email})
-        db.commit()
+
         return {"status": "success"}
     except sqlalchemy.exc.SQLAlchemyError:
         raise HTTPException(status_code=404, detail="SQL ERROR!")
-    finally:
-        db.close()
+
+
 
 @app.get(constants.PATH_AUTH_ME)
 async def me(access_token,db = Depends(get_db)):
-
     try:
-        derived_id = jwt.decode(access_token, SECRET_KEY, algorithms=[ALGORITHM])["id"]
-
+        derived_email = jwt.decode(access_token, SECRET_KEY, algorithms=[ALGORITHM])["email"]
         result = (
-            db.execute(text(constants.SQL_SELECT_USER_BY_ID), {"id": derived_id})
-            .mappings()
-            .fetchone()
+            db.execute(text(constants.SQL_SELECT_USER_BY_EMAIL), {"email": derived_email}).mappings().fetchone()
         )
-
-        print(result["id"], result["email"], result["role"])
         return result["id"], result["email"], result["role"]
+    except JWTError:
+        raise HTTPException(status_code=404, detail="Refresh token error")
 
-    except SQLAlchemyError:
-        raise HTTPException(status_code=404, detail="SQL ERROR!")
-    finally:
-        db.close()
+
+
+
 @app.get(constants.PATH_HEALTH)
 async def health():
     try:

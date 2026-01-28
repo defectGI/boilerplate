@@ -3,7 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import create_engine, Column, String, Integer, DateTime
 from sqlalchemy.orm import sessionmaker, declarative_base
-from app.constants import DATABASE_URL
+from constants import DATABASE_URL
 
 
 
@@ -22,6 +22,7 @@ class Users(Base):
     created_at = Column(DateTime, default=datetime.now)
     updated_at = Column(DateTime, default=datetime.now)
     refresh_token = Column(String)
+    refresh_token_expire = Column(DateTime)
     last_login_at = Column(DateTime)
 
 Base.metadata.create_all(bind=engine)
@@ -36,5 +37,9 @@ def get_db():
     db = SessionLocal()
     try:
         yield db
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
