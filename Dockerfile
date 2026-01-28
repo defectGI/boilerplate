@@ -4,14 +4,14 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
-RUN apt-get update && apt-get install -y sqlite3 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y sqlite3 dos2unix && rm -rf /var/lib/apt/lists/*
 
 COPY ./app ./app
 COPY ./migrations /app/migrations
 RUN mkdir -p /app/data
 
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+RUN dos2unix /entrypoint.sh && chmod +x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
 
