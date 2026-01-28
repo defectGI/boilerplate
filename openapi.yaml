@@ -1,0 +1,79 @@
+openapi: 3.0.3
+info:
+  title: Auth API
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8000
+
+paths:
+  /auth/login:
+    post:
+      summary: Kullanici girisi
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: Basarili
+        '401':
+          description: Hatali sifre
+        '404':
+          description: Kullanici bulunamadi
+
+  /auth/refresh:
+    post:
+      summary: Token yenileme
+      parameters:
+        - name: refresh_token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Basarili
+
+  /auth/logout:
+    post:
+      summary: Cikis
+      parameters:
+        - name: email
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Basarili
+
+  /auth/me:
+    get:
+      summary: Kullanici bilgisi
+      parameters:
+        - name: access_token
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Basarili
+        '403':
+          description: Gecersiz token
+
+  /health:
+    get:
+      summary: Saglik kontrolu
+      responses:
+        '200':
+          description: Basarili
