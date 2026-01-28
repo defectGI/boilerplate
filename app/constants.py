@@ -1,14 +1,14 @@
+import os
 #Paths
 PATH_AUTH_LOGIN = "/auth/login"
 PATH_AUTH_REFRESH = "/auth/refresh"
 PATH_AUTH_LOGOUT = "/auth/logout"
 PATH_AUTH_ME = "/auth/me"
 PATH_HEALTH = "/health"
-
 #DB / Env
-import os
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./database.db")
-ENV_SECRET_KEY = "SECRET_KEY"
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:////app/data/database.db")
+TEST_DATABASE_URL = "sqlite:///test_database.db"
+ENV_SECRET_KEY = os.getenv("SECRET_KEY")
 
 #SQL queries
 INSERT_USER_QUERY = """

@@ -23,7 +23,7 @@ DATABASE_URL = constants.DATABASE_URL
 ALGORITHM = constants.ALGORITHM
 ACCESS_TOKEN_EXPIRE_MINUTES = constants.ACCESS_TOKEN_EXPIRE_MINUTES
 REFRESH_TOKEN_EXPIRE_DAYS = constants.REFRESH_TOKEN_EXPIRE_DAYS
-SECRET_KEY = getenv(constants.ENV_SECRET_KEY)
+SECRET_KEY = constants.ENV_SECRET_KEY
 
 app = FastAPI()
 
@@ -98,7 +98,7 @@ async def login(body:LoginRequest, request: Request,db = Depends(get_db)):
         return {"refresh_token":refresh_token, "access_token":access, "refresh_expire_at":refresh_expire}
     except VerifyMismatchError:
         failed_login(db, email,request)
-        raise HTTPException(status_code=404, detail="Email password combination invalid")
+        raise HTTPException(status_code=401, detail="Email password combination invalid")
 
 @app.post(constants.PATH_AUTH_REFRESH)
 async def refresh(refresh_token, db = Depends(get_db)):
@@ -112,7 +112,7 @@ async def refresh(refresh_token, db = Depends(get_db)):
     except JWTError:
         raise HTTPException(status_code=404, detail="Refresh token error")
     if not validate:
-        raise HTTPException(status_code=403, detail="Refresh token expired")
+        raise HTTPException(status_code=401, detail="Refresh token expired")
     access, access_expire = create_access_token(user["id"],db)
     return {"access_token" : access, "access_expire" : access_expire}
 
@@ -138,7 +138,7 @@ async def me(access_token,db = Depends(get_db)):
         )
         return result["id"], result["email"], result["role"]
     except JWTError:
-        raise HTTPException(status_code=404, detail="Refresh token error")
+        raise HTTPException(status_code=403, detail="Refresh token error")
 
 
 
