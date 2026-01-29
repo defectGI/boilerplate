@@ -3,13 +3,11 @@
 FastAPI ile JWT kimlik dogrulama API'si.
 
 ## Kurulum
-
 ```bash
 pip install -r requirements.txt
 cd app
 uvicorn main:app --reload --port 8000
 ```
-
 Docker ile:
 ```bash
 docker-compose up --build
@@ -56,7 +54,7 @@ cd app
 pytest test_api.py -v
 ```
 
-## Varsayilan Kullanicilar
+## Varsayilan Kullanicilar SWAGGER'DA
 
 | Email | Sifre |
 |-------|-------|

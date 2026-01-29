@@ -1,3 +1,4 @@
+import os
 
 import pytest
 from argon2 import PasswordHasher

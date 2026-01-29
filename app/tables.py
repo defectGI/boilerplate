@@ -32,6 +32,8 @@ class LoginRequest(BaseModel):
     email: EmailStr
     password: str
 
+class RefreshRequest(BaseModel):
+    refresh_token: str
 
 def get_db():
     db = SessionLocal()

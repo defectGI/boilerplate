@@ -14,7 +14,7 @@ from argon2.exceptions import VerifyMismatchError
 
 from dotenv import load_dotenv
 import constants
-from tables import SessionLocal, LoginRequest, get_db
+from tables import SessionLocal, LoginRequest, get_db, RefreshRequest
 from jose import jwt, JWTError
 
 load_dotenv()
@@ -74,7 +74,6 @@ async def login(body:LoginRequest, request: Request,db = Depends(get_db)):
     if attempts > 5:
         raise HTTPException(status_code=403, detail="This ip is locked")
     try:
-        # fetch user by email
         result = (
             db.execute(text(constants.SQL_SELECT_USER_BY_EMAIL), {"email": email})
             .mappings()
@@ -101,8 +100,9 @@ async def login(body:LoginRequest, request: Request,db = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Email password combination invalid")
 
 @app.post(constants.PATH_AUTH_REFRESH)
-async def refresh(refresh_token, db = Depends(get_db)):
+async def refresh(body:RefreshRequest,request:Request, db = Depends(get_db)):
     try:
+        refresh_token = body.refresh_token
         payload = jwt.decode(refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
         email = payload["email"]
         user = db.execute(text(constants.SQL_SELECT_USER_BY_EMAIL), {"email": email}).mappings().fetchone()
@@ -110,7 +110,7 @@ async def refresh(refresh_token, db = Depends(get_db)):
             raise HTTPException(status_code=404, detail="User not found")
         validate = db.execute(text(constants.SQL_VALIDATE_REFRESH), {"id": user["id"], "token": refresh_token}).fetchone()
     except JWTError:
-        raise HTTPException(status_code=404, detail="Refresh token error")
+        raise HTTPException(status_code=422, detail="Request syntax error")
     if not validate:
         raise HTTPException(status_code=401, detail="Refresh token expired")
     access, access_expire = create_access_token(user["id"],db)
@@ -125,7 +125,7 @@ async def logout(email,db = Depends(get_db)):
 
         return {"status": "success"}
     except sqlalchemy.exc.SQLAlchemyError:
-        raise HTTPException(status_code=404, detail="SQL ERROR!")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 
@@ -138,7 +138,7 @@ async def me(access_token,db = Depends(get_db)):
         )
         return result["id"], result["email"], result["role"]
     except JWTError:
-        raise HTTPException(status_code=403, detail="Refresh token error")
+        raise HTTPException(status_code=401, detail="Unauthorized")
 
 
 
